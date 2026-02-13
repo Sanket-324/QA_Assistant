@@ -2,9 +2,12 @@ import streamlit as st
 
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
 from llama_index.core.node_parser import SentenceSplitter
+from dotenv import load_dotenv
+import os
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.llms.ollama import Ollama
+from llama_index.llms.groq import Groq
 
+load_dotenv()
 
 # --------------------------------------------------
 # PAGE CONFIG
@@ -43,12 +46,12 @@ def load_system():
         embed_model=embed_model
     )
 
-    # 5️⃣ LLM (Ollama - unchanged)
-    llm = Ollama(
-        model="mistral",   # make sure you did: ollama pull mistral
-        temperature=0.1,
-        num_predict=600,
-        request_timeout=300.0
+    # 5️⃣ LLM (Groq - using llama-3.1-8b-instant)
+    llm = Groq(
+        model="llama-3.1-8b-instant",
+        api_key=os.getenv("GROQ_API_KEY"),
+        temperature=0.2,
+        max_tokens=350
     )
 
     return index, llm
@@ -62,7 +65,7 @@ index, llm = load_system()
 # --------------------------------------------------
 def admission_query_engine(question):
 
-    retriever = index.as_retriever(similarity_top_k=5)
+    retriever = index.as_retriever(similarity_top_k=8)
     retrieved_nodes = retriever.retrieve(question)
 
     SIMILARITY_THRESHOLD = 0.25
@@ -75,7 +78,7 @@ def admission_query_engine(question):
     if not relevant_nodes:
         return "I do not have sufficient information from official admission documents."
 
-    top_nodes = relevant_nodes[:2]
+    top_nodes = relevant_nodes[:3]
     context = "\n\n".join([node.text for node in top_nodes])
 
     prompt = f"""
@@ -92,7 +95,10 @@ Question:
 Answer:
 """
 
-    response = llm.complete(prompt)
+    try:
+        response = llm.complete(prompt)
+    except Exception as e:
+        return f"LLM error: {e}"
 
     return str(response)
 
